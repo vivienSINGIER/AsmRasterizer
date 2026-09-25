@@ -6,9 +6,11 @@ extrn WriteFile : PROC
 extrn GetAsyncKeyState : PROC
 extrn Sleep : PROC
 extrn Intersect : PROC
+extrn sin : PROC
+extrn cos : PROC
 
 .data
-refresh_cooldown equ 100
+refresh_cooldown equ 50
 
 VK_ESCAPE equ 1Bh 
 STD_OUTPUT_HANDLE equ -11
@@ -21,9 +23,17 @@ screenW equ 64
 rowLen equ screenW + 1
 
 ALIGN 16                                                                                                                                                           
-tri REAL4 -2.0, -2.0, 2.0, 0.0                                                                                                                                                                            
-    REAL4  0.0,  2.0, 2.0, 0.0                                                                                                                                                                           
-    REAL4  2.0, -2.0, 2.0, 0.0
+triBase REAL4 -2.0, -2.0, 2.0, 0.0                                                                                                                                                                            
+        REAL4  0.0,  2.0, 2.0, 0.0                                                                                                                                                                           
+        REAL4  2.0, -2.0, 2.0, 0.0
+
+ALIGN 16
+tri     REAL4 16 dup(0.0)
+
+angle      REAL4 0.0
+ANGLE_STEP REAL4 0.05
+cosA       REAL4 0.0
+sinA       REAL4 0.0
 
 ALIGN 16
 ray REAL4 0.0, 0.0, -2.0, 0.0
@@ -84,6 +94,54 @@ asm_is_key_down PROC
     ret
 asm_is_key_down ENDP
   
+RotateZ PROC
+    sub rsp, 40
+
+    cvtss2sd xmm0, angle
+    call cos
+    cvtsd2ss xmm0, xmm0
+    movss cosA, xmm0
+
+    cvtss2sd xmm0, angle
+    call sin
+    cvtsd2ss xmm0, xmm0
+    movss sinA, xmm0
+
+    lea rcx, triBase
+    lea rdx, tri
+    mov r8d, 3
+v_loop:                                                                                                                                                                                                                                                                                                       
+    movss xmm0, DWORD PTR [rcx]      ; x
+    movss xmm1, DWORD PTR [rcx + 4]  ; y
+
+    movss xmm2, xmm0
+    mulss xmm2, cosA                 ; x*c
+    movss xmm3, xmm1
+    mulss xmm3, sinA                 ; y*s
+    subss xmm2, xmm3                 ; x' = x*c - y*s
+
+    mulss xmm0, sinA                 ; x*s
+    mulss xmm1, cosA                 ; y*c
+    addss xmm0, xmm1                 ; y' = x*s + y*c
+
+    movss DWORD PTR [rdx],     xmm2
+    movss DWORD PTR [rdx + 4], xmm0
+    mov   eax, DWORD PTR [rcx + 8]
+    mov   DWORD PTR [rdx + 8], eax
+
+    add rcx, 16
+    add rdx, 16
+    dec r8d
+    jnz v_loop
+
+    movss xmm0, angle
+    addss xmm0, ANGLE_STEP
+    movss angle, xmm0
+
+    add rsp, 40
+    ret
+RotateZ ENDP
+
 Render PROC
     push rbx ; y
     push rsi ; x
@@ -153,6 +211,7 @@ run_loop:
     sub rsp, 40
     mov rcx, refresh_cooldown
     call Sleep
+    call RotateZ
     call Render 
     call Draw
     mov rcx, VK_ESCAPE

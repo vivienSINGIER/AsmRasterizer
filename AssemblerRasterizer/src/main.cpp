@@ -46,7 +46,7 @@ bool EnableVT()
 int main() {
     if (EnableVT() == false)
         std::cout << "Couldn't set console mode." << std::endl;
-    
+
     Run();
     
     return 0;
